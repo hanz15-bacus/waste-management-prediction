@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waste Classification App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            background-color: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-box {
+            border: 2px dashed #4CAF50;
+            border-radius: 5px;
+            padding: 40px 20px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .upload-box:hover {
+            background-color: #f9f9f9;
+        }
+        .preview-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 300px;
+            display: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .result-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+        }
+        .result-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #4CAF50;
+        }
+        .result-prediction {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .result-confidence {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 5px solid #4CAF50;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .top-results {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #f1f1f1;
+            border-radius: 10px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            border-radius: 10px;
+            background-color: #4CAF50;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+        }
+        .result-item {
+            margin: 10px 0;
+        }
+        .error-message {
+            color: #f44336;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Waste Classification</h1>
+            <p>Upload an image of waste to classify it</p>
+        </div>
+        
+        <div class="upload-area">
+            <div class="upload-box" id="uploadBox">
+                <h3>Drag & Drop or Click to Upload</h3>
+                <p>Supported formats: JPG, JPEG, PNG</p>
+                <input type="file" id="fileInput" accept=".jpg, .jpeg, .png" style="display: none;">
+            </div>
+            
+            <div class="preview-container">
+                <img id="imagePreview" src="" alt="Image Preview">
+            </div>
+            
+            <button class="button" id="classifyBtn" disabled>Classify Waste</button>
+            <p class="error-message" id="errorMessage"></p>
+        </div>
+        
+        <div class="loader" id="loader"></div>
+        
+        <div class="result-container" id="resultContainer">
+            <div class="result-title">Classification Result</div>
+            <div class="result-prediction" id="prediction"></div>
+            <div class="result-confidence" id="confidence"></div>
+            
+            <div class="top-results">
+                <h3>Top Predictions:</h3>
+                <div id="topResults"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const classifyBtn = document.getElementById('classifyBtn');
+        const loader = document.getElementById('loader');
+        const resultContainer = document.getElementById('resultContainer');
+        const prediction = document.getElementById('prediction');
+        const confidence = document.getElementById('confidence');
+        const topResults = document.getElementById('topResults');
+        const errorMessage = document.getElementById('errorMessage');
+        
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.style.borderColor = '#45a049';
+            uploadBox.style.backgroundColor = '#f9f9f9';
+        });
+        
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.style.borderColor = '#4CAF50';
+            uploadBox.style.backgroundColor = 'white';
+        });
+        
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.style.borderColor = '#4CAF50';
+            uploadBox.style.backgroundColor = 'white';
+            
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        // Click to upload
+        uploadBox.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        // Handle the selected file
+        function handleFile(file) {
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+            
+            if (!validTypes.includes(file.type)) {
+                errorMessage.textContent = 'Please upload a valid image file (JPG, JPEG, PNG)';
+                errorMessage.style.display = 'block';
+                classifyBtn.disabled = true;
+                return;
+            }
+            
+            errorMessage.style.display = 'none';
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+                classifyBtn.disabled = false;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Classify button click
+        classifyBtn.addEventListener('click', () => {
+            if (fileInput.files.length === 0) return;
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            // Show loader, hide results
+            loader.style.display = 'block';
+            resultContainer.style.display = 'none';
+            classifyBtn.disabled = true;
+            
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                
+                if (data.error) {
+                    errorMessage.textContent = data.error;
+                    errorMessage.style.display = 'block';
+                    return;
+                }
+                
+                // Display results
+                prediction.textContent = data.prediction.toUpperCase();
+                confidence.textContent = `Confidence: ${(data.confidence * 100).toFixed(2)}%`;
+                
+                // Display top results
+                topResults.innerHTML = '';
+                data.top_results.forEach(result => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    
+                    const label = document.createElement('div');
+                    label.textContent = result.class;
+                    
+                    const progressContainer = document.createElement('div');
+                    progressContainer.className = 'progress-container';
+                    
+                    const progressBar = document.createElement('div');
+                    progressBar.className = 'progress-bar';
+                    progressBar.style.width = `${result.confidence * 100}%`;
+                    progressBar.textContent = `${(result.confidence * 100).toFixed(2)}%`;
+                    
+                    progressContainer.appendChild(progressBar);
+                    resultItem.appendChild(label);
+                    resultItem.appendChild(progressContainer);
+                    
+                    topResults.appendChild(resultItem);
+                });
+                
+                resultContainer.style.display = 'block';
+                classifyBtn.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                errorMessage.textContent = 'An error occurred while classifying the image. Please try again.';
+                errorMessage.style.display = 'block';
+                classifyBtn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>
