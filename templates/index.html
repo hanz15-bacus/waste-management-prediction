@@ -25,13 +25,35 @@
             border-radius: 5px;
             margin-bottom: 30px;
         }
-        .upload-area {
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #ddd;
+            border: none;
+            border-radius: 5px 5px 0 0;
+            margin: 0 5px;
+        }
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .content-area {
             background-color: white;
             border-radius: 8px;
             padding: 30px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            text-align: center;
             margin-bottom: 30px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
         .upload-box {
             border: 2px dashed #4CAF50;
@@ -44,6 +66,21 @@
         .upload-box:hover {
             background-color: #f9f9f9;
         }
+        .camera-container {
+            width: 100%;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #videoElement {
+            width: 100%;
+            max-width: 640px;
+            max-height: 480px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        #captureCanvas {
+            display: none;
+        }
         .preview-container {
             display: flex;
             justify-content: center;
@@ -55,6 +92,14 @@
             display: none;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .camera-preview {
+            max-width: 100%;
+            max-height: 300px;
+            display: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin: 20px 0;
         }
         .button {
             background-color: #4CAF50;
@@ -76,6 +121,12 @@
         .button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
+        }
+        .camera-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
         }
         .result-container {
             background-color: white;
@@ -148,22 +199,50 @@
     <div class="container">
         <div class="header">
             <h1>Waste Classification</h1>
-            <p>Upload an image of waste to classify it</p>
+            <p>Classify waste using your camera or by uploading an image</p>
         </div>
         
-        <div class="upload-area">
-            <div class="upload-box" id="uploadBox">
-                <h3>Drag & Drop or Click to Upload</h3>
-                <p>Supported formats: JPG, JPEG, PNG</p>
-                <input type="file" id="fileInput" accept=".jpg, .jpeg, .png" style="display: none;">
+        <div class="tabs">
+            <button class="tab active" data-tab="camera">Camera</button>
+            <button class="tab" data-tab="upload">Upload Image</button>
+        </div>
+        
+        <div class="content-area">
+            <!-- Camera Tab -->
+            <div class="tab-content active" id="camera-tab">
+                <div class="camera-container">
+                    <video id="videoElement" autoplay playsinline></video>
+                    <canvas id="captureCanvas"></canvas>
+                </div>
+                
+                <div class="camera-buttons">
+                    <button class="button" id="startCameraBtn">Start Camera</button>
+                    <button class="button" id="captureBtn" disabled>Capture Image</button>
+                </div>
+                
+                <div class="preview-container">
+                    <img id="cameraPreview" class="camera-preview" src="" alt="Captured Image">
+                </div>
+                
+                <button class="button" id="classifyCapturedBtn" disabled>Classify Waste</button>
+                <p class="error-message" id="cameraErrorMessage"></p>
             </div>
             
-            <div class="preview-container">
-                <img id="imagePreview" src="" alt="Image Preview">
+            <!-- Upload Tab -->
+            <div class="tab-content" id="upload-tab">
+                <div class="upload-box" id="uploadBox">
+                    <h3>Drag & Drop or Click to Upload</h3>
+                    <p>Supported formats: JPG, JPEG, PNG</p>
+                    <input type="file" id="fileInput" accept=".jpg, .jpeg, .png" style="display: none;">
+                </div>
+                
+                <div class="preview-container">
+                    <img id="imagePreview" src="" alt="Image Preview">
+                </div>
+                
+                <button class="button" id="classifyUploadBtn" disabled>Classify Waste</button>
+                <p class="error-message" id="uploadErrorMessage"></p>
             </div>
-            
-            <button class="button" id="classifyBtn" disabled>Classify Waste</button>
-            <p class="error-message" id="errorMessage"></p>
         </div>
         
         <div class="loader" id="loader"></div>
@@ -181,17 +260,88 @@
     </div>
 
     <script>
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.getAttribute('data-tab');
+                
+                // Remove active class from all tabs and contents
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                
+                // Add active class to current tab and content
+                tab.classList.add('active');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
+            });
+        });
+        
+        // Camera functionality
+        const videoElement = document.getElementById('videoElement');
+        const captureCanvas = document.getElementById('captureCanvas');
+        const cameraPreview = document.getElementById('cameraPreview');
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const classifyCapturedBtn = document.getElementById('classifyCapturedBtn');
+        const cameraErrorMessage = document.getElementById('cameraErrorMessage');
+        
+        let stream = null;
+        
+        startCameraBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                videoElement.srcObject = stream;
+                startCameraBtn.textContent = 'Switch Camera';
+                captureBtn.disabled = false;
+                cameraErrorMessage.style.display = 'none';
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                cameraErrorMessage.textContent = 'Error accessing camera. Please check permissions.';
+                cameraErrorMessage.style.display = 'block';
+            }
+        });
+        
+        captureBtn.addEventListener('click', () => {
+            // Set canvas dimensions to match video
+            captureCanvas.width = videoElement.videoWidth;
+            captureCanvas.height = videoElement.videoHeight;
+            
+            // Draw video frame to canvas
+            const context = captureCanvas.getContext('2d');
+            context.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+            
+            // Convert canvas to image
+            const imageDataUrl = captureCanvas.toDataURL('image/jpeg');
+            cameraPreview.src = imageDataUrl;
+            cameraPreview.style.display = 'block';
+            
+            classifyCapturedBtn.disabled = false;
+        });
+        
+        classifyCapturedBtn.addEventListener('click', () => {
+            // Convert canvas to blob
+            captureCanvas.toBlob((blob) => {
+                const capturedFile = new File([blob], "captured_image.jpg", { type: "image/jpeg" });
+                classifyImage(capturedFile, 'camera');
+            }, 'image/jpeg');
+        });
+        
+        // Upload functionality
         const uploadBox = document.getElementById('uploadBox');
         const fileInput = document.getElementById('fileInput');
         const imagePreview = document.getElementById('imagePreview');
-        const classifyBtn = document.getElementById('classifyBtn');
-        const loader = document.getElementById('loader');
-        const resultContainer = document.getElementById('resultContainer');
-        const prediction = document.getElementById('prediction');
-        const confidence = document.getElementById('confidence');
-        const topResults = document.getElementById('topResults');
-        const errorMessage = document.getElementById('errorMessage');
+        const classifyUploadBtn = document.getElementById('classifyUploadBtn');
+        const uploadErrorMessage = document.getElementById('uploadErrorMessage');
         
+        // Event listeners for drag and drop
         uploadBox.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadBox.style.borderColor = '#45a049';
@@ -229,34 +379,50 @@
             const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
             
             if (!validTypes.includes(file.type)) {
-                errorMessage.textContent = 'Please upload a valid image file (JPG, JPEG, PNG)';
-                errorMessage.style.display = 'block';
-                classifyBtn.disabled = true;
+                uploadErrorMessage.textContent = 'Please upload a valid image file (JPG, JPEG, PNG)';
+                uploadErrorMessage.style.display = 'block';
+                classifyUploadBtn.disabled = true;
                 return;
             }
             
-            errorMessage.style.display = 'none';
+            uploadErrorMessage.style.display = 'none';
             
             const reader = new FileReader();
             reader.onload = function(e) {
                 imagePreview.src = e.target.result;
                 imagePreview.style.display = 'block';
-                classifyBtn.disabled = false;
+                classifyUploadBtn.disabled = false;
             };
             reader.readAsDataURL(file);
         }
         
-        // Classify button click
-        classifyBtn.addEventListener('click', () => {
+        // Classify button click for upload
+        classifyUploadBtn.addEventListener('click', () => {
             if (fileInput.files.length === 0) return;
-            
+            classifyImage(fileInput.files[0], 'upload');
+        });
+        
+        // Common elements
+        const loader = document.getElementById('loader');
+        const resultContainer = document.getElementById('resultContainer');
+        const prediction = document.getElementById('prediction');
+        const confidence = document.getElementById('confidence');
+        const topResults = document.getElementById('topResults');
+        
+        // Common classify function
+        function classifyImage(file, source) {
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
             
             // Show loader, hide results
             loader.style.display = 'block';
             resultContainer.style.display = 'none';
-            classifyBtn.disabled = true;
+            
+            if (source === 'upload') {
+                classifyUploadBtn.disabled = true;
+            } else {
+                classifyCapturedBtn.disabled = true;
+            }
             
             fetch('/predict', {
                 method: 'POST',
@@ -267,8 +433,13 @@
                 loader.style.display = 'none';
                 
                 if (data.error) {
-                    errorMessage.textContent = data.error;
-                    errorMessage.style.display = 'block';
+                    if (source === 'upload') {
+                        uploadErrorMessage.textContent = data.error;
+                        uploadErrorMessage.style.display = 'block';
+                    } else {
+                        cameraErrorMessage.textContent = data.error;
+                        cameraErrorMessage.style.display = 'block';
+                    }
                     return;
                 }
                 
@@ -301,16 +472,29 @@
                 });
                 
                 resultContainer.style.display = 'block';
-                classifyBtn.disabled = false;
+                
+                if (source === 'upload') {
+                    classifyUploadBtn.disabled = false;
+                } else {
+                    classifyCapturedBtn.disabled = false;
+                }
             })
             .catch(error => {
                 console.error('Error:', error);
                 loader.style.display = 'none';
-                errorMessage.textContent = 'An error occurred while classifying the image. Please try again.';
-                errorMessage.style.display = 'block';
-                classifyBtn.disabled = false;
+                
+                const errorMsg = 'An error occurred while classifying the image. Please try again.';
+                if (source === 'upload') {
+                    uploadErrorMessage.textContent = errorMsg;
+                    uploadErrorMessage.style.display = 'block';
+                    classifyUploadBtn.disabled = false;
+                } else {
+                    cameraErrorMessage.textContent = errorMsg;
+                    cameraErrorMessage.style.display = 'block';
+                    classifyCapturedBtn.disabled = false;
+                }
             });
-        });
+        }
     </script>
 </body>
 </html>

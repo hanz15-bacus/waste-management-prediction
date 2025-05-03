@@ -20,7 +20,7 @@ train_datagen = ImageDataGenerator(
     width_shift_range=0.1,       
     height_shift_range=0.1,      
     shear_range=0.2,             
-    horizontal_flip=True
+    horizontal_flip = True
 )
 
 val_datagen = ImageDataGenerator(rescale=1./255)
@@ -38,29 +38,27 @@ val_generator = val_datagen.flow_from_directory(
     target_size=IMG_SIZE,
     batch_size=BATCH_SIZE,
     class_mode='categorical',
-    shuffle=False
+    shuffle = False
 )
 
 base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
-base_model.trainable = True  # <-- Unfreeze for fine-tuning
+base_model.trainable = True  
 
-# Optional: freeze part of the base model
-for layer in base_model.layers[:100]:  # Freeze first 100 layers
+for layer in base_model.layers[:100]:  # freeze ang first 100 layers but optional
     layer.trainable = False
 
 model = models.Sequential([
     base_model,
     layers.GlobalAveragePooling2D(),
     layers.Dense(256, activation='relu'),  
-    layers.Dropout(0.4),                   
+    layers.Dropout(0.4),
     layers.Dense(train_generator.num_classes, activation='softmax')
 ])
 
-model.compile(optimizer=Adam(learning_rate=1e-5),  # Lower LR for fine-tuning
+model.compile(optimizer=Adam(learning_rate=1e-5),  # fine tuning if lower ang learning rate 
               loss='categorical_crossentropy',
               metrics=['accuracy'])
 
-# Train the model
 model.fit(
     train_generator,
     epochs=10,  
